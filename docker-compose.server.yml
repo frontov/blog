@@ -1,8 +1,6 @@
 services:
   blog:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/frontov/blog:latest
     container_name: telegram-blog
     restart: unless-stopped
     env_file:

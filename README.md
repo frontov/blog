@@ -84,10 +84,43 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 Если на сервере уже есть reverse proxy `Caddy`, можно запускать блог без проброса порта наружу:
 
 ```bash
-docker-compose -f docker-compose.server.yml up -d --build
+docker-compose -f docker-compose.server.yml up -d
 ```
 
 В этом режиме контейнер подключается к сети `sporza_default`, а пример блока для Caddy лежит в `deploy/Caddyfile.blog`.
+
+## GitHub Actions + GHCR
+
+В репозитории есть workflow `.github/workflows/docker-publish.yml`, который:
+
+- собирает Docker image на каждый push в `main`;
+- публикует его в `ghcr.io/frontov/blog:latest`;
+- собирает image сразу под `linux/amd64`;
+- вшивает production `SITE_URL=https://i.sporly.ru` на этапе build.
+
+Чтобы сервер обновлялся уже без локального `docker load`, можно использовать:
+
+```bash
+docker login ghcr.io -u YOUR_GITHUB_USERNAME
+docker pull ghcr.io/frontov/blog:latest
+docker rm -f telegram-blog || true
+docker run -d \
+  --name telegram-blog \
+  --restart unless-stopped \
+  --env-file /opt/blog/.env \
+  -v blog_data:/app/data \
+  --network sporza_default \
+  --network-alias telegram-blog \
+  ghcr.io/frontov/blog:latest
+```
+
+Либо короткий скрипт:
+
+```bash
+sh scripts/server-update.sh
+```
+
+Если образ GHCR приватный, серверу понадобится `docker login ghcr.io`.
 
 ## Что уже поддерживается
 
