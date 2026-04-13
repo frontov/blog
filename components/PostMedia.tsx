@@ -4,6 +4,18 @@ function buildMediaUrl(fileId: string) {
   return `/api/telegram/file?fileId=${encodeURIComponent(fileId)}`;
 }
 
+function resolveMediaUrl(item: BlogPostMedia) {
+  if (item.url) {
+    return item.url;
+  }
+
+  if (item.fileId) {
+    return buildMediaUrl(item.fileId);
+  }
+
+  return "";
+}
+
 export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
   if (!media?.length) {
     return null;
@@ -15,7 +27,7 @@ export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
         <figure key={item.id} className={`post-media__item post-media__item--${item.kind}`}>
           {item.kind === "photo" ? (
             <img
-              src={buildMediaUrl(item.fileId)}
+              src={resolveMediaUrl(item)}
               alt=""
               width={item.width}
               height={item.height}
@@ -23,7 +35,7 @@ export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
             />
           ) : (
             <video
-              src={buildMediaUrl(item.fileId)}
+              src={resolveMediaUrl(item)}
               controls
               playsInline
               preload="metadata"

@@ -15,7 +15,8 @@ const postEntitySchema = z.object({
 const postMediaSchema = z.object({
   id: z.string(),
   kind: z.union([z.literal("photo"), z.literal("video")]),
-  fileId: z.string(),
+  fileId: z.string().optional(),
+  url: z.string().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
   duration: z.number().optional(),

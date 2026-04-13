@@ -9,7 +9,8 @@ export type BlogPostEntity = {
 export type BlogPostMedia = {
   id: string;
   kind: "photo" | "video";
-  fileId: string;
+  fileId?: string;
+  url?: string;
   width?: number;
   height?: number;
   duration?: number;

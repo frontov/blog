@@ -79,6 +79,37 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 - открыть на сервере порт, через который сайт будет доступен снаружи;
 - зарегистрировать webhook уже на публичный адрес сайта.
 
+## Импорт старых постов из Telegram
+
+Текущий webhook забирает только новые публикации. Для загрузки старой истории канала есть отдельный импортёр.
+
+Что нужно заполнить в `.env`:
+
+```env
+TELEGRAM_API_ID=123456
+TELEGRAM_API_HASH=your_telegram_api_hash
+TELEGRAM_CHANNEL=@your_channel
+TELEGRAM_SESSION=
+```
+
+`TELEGRAM_API_ID` и `TELEGRAM_API_HASH` берутся в `https://my.telegram.org`.
+
+Запуск:
+
+```bash
+npm run import:telegram-history
+```
+
+При первом запуске скрипт попросит номер телефона, код из Telegram и при необходимости пароль 2FA.
+После входа он выведет `TELEGRAM_SESSION` — его лучше сохранить в `.env`, чтобы потом импорт повторно запускался без повторной авторизации.
+
+Импортёр:
+
+- читает всю историю канала;
+- скачивает фото и видео в `public/uploads/telegram`;
+- сохраняет посты в текущее хранилище `data/posts.json`;
+- не мешает дальнейшей автопубликации новых постов через webhook.
+
 ## Запуск на сервере с существующим Caddy
 
 Если на сервере уже есть reverse proxy `Caddy`, можно запускать блог без проброса порта наружу:
