@@ -1,0 +1,24 @@
+services:
+  blog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-blog
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - blog_data:/app/data
+    networks:
+      default:
+      sporza_proxy:
+        aliases:
+          - telegram-blog
+
+volumes:
+  blog_data:
+
+networks:
+  sporza_proxy:
+    external: true
+    name: sporza_default

@@ -79,6 +79,16 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 - открыть на сервере порт, через который сайт будет доступен снаружи;
 - зарегистрировать webhook уже на публичный адрес сайта.
 
+## Запуск на сервере с существующим Caddy
+
+Если на сервере уже есть reverse proxy `Caddy`, можно запускать блог без проброса порта наружу:
+
+```bash
+docker-compose -f docker-compose.server.yml up -d --build
+```
+
+В этом режиме контейнер подключается к сети `sporza_default`, а пример блока для Caddy лежит в `deploy/Caddyfile.blog`.
+
 ## Что уже поддерживается
 
 - фото и видео из Telegram-постов;
