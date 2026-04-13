@@ -34,6 +34,30 @@ cp .env.example .env
 npm run dev
 ```
 
+## Запуск в Docker
+
+1. Заполни `.env`:
+
+```bash
+cp .env.example .env
+```
+
+2. Собери и запусти контейнер:
+
+```bash
+docker compose up -d --build
+```
+
+3. Сайт будет доступен на `http://localhost:3000`.
+
+Данные постов сохраняются в Docker volume `blog_data`, поэтому не пропадут после перезапуска контейнера.
+
+Если хочешь остановить контейнер:
+
+```bash
+docker compose down
+```
+
 ## Как подключить Telegram
 
 1. Создай бота через `@BotFather`.
@@ -48,6 +72,12 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 ```
 
 После этого новые посты из канала будут отправляться в API и появляться на сайте.
+
+Для production-режима в Docker особенно важно:
+
+- указать реальный `SITE_URL` с `https://`;
+- открыть на сервере порт, через который сайт будет доступен снаружи;
+- зарегистрировать webhook уже на публичный адрес сайта.
 
 ## Что уже поддерживается
 
