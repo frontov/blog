@@ -20,29 +20,71 @@ function formatDate(date: string) {
 type PostsFeedProps = {
   initialPosts: BlogPost[];
   initialHasMore: boolean;
-  siteName: string;
+  initialSiteName: string;
   initials: string;
-  channelUrl: string | null;
-  avatarUrl: string | null;
+  initialChannelUrl: string | null;
+  initialAvatarUrl: string | null;
 };
 
 export function PostsFeed({
   initialPosts,
   initialHasMore,
-  siteName,
+  initialSiteName,
   initials,
-  channelUrl,
-  avatarUrl
+  initialChannelUrl,
+  initialAvatarUrl
 }: PostsFeedProps) {
   const [posts, setPosts] = useState(initialPosts);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [siteName, setSiteName] = useState(initialSiteName);
+  const [channelUrl, setChannelUrl] = useState<string | null>(initialChannelUrl);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
 
   const avatar = useMemo(() => {
     return avatarUrl ? <img src={avatarUrl} alt="" /> : initials;
   }, [avatarUrl, initials]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      try {
+        const response = await fetch("/api/telegram/channel-profile", {
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          title: string;
+          url: string | null;
+          avatarSmallUrl: string | null;
+          avatarLargeUrl: string | null;
+        };
+
+        if (cancelled) {
+          return;
+        }
+
+        setSiteName(payload.title || initialSiteName);
+        setChannelUrl(payload.url ?? initialChannelUrl);
+        setAvatarUrl(payload.avatarLargeUrl || payload.avatarSmallUrl || null);
+      } catch {
+        // Keep initial fallback values if runtime profile loading fails.
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialChannelUrl, initialSiteName]);
 
   useEffect(() => {
     if (!hasMore || isLoading) {

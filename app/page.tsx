@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
 
+import { ChannelHero } from "@/components/ChannelHero";
 import { PostsFeed } from "@/components/PostsFeed";
 import { readPostsPage } from "@/lib/posts";
-import { createHomeMetadata } from "@/lib/site";
-import { getTelegramChannelProfile } from "@/lib/telegram-channel";
+import { createHomeMetadata, getSiteName } from "@/lib/site";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const profile = await getTelegramChannelProfile();
-  return createHomeMetadata(profile);
-}
+export const metadata: Metadata = createHomeMetadata();
 
 const INITIAL_PAGE_SIZE = 12;
 
@@ -19,32 +16,26 @@ function getInitials(name: string) {
 
 export default async function HomePage() {
   const initialPage = await readPostsPage({ offset: 0, limit: INITIAL_PAGE_SIZE });
-  const profile = await getTelegramChannelProfile();
-  const siteName = profile.title;
+  const siteName = getSiteName();
   const initials = getInitials(siteName);
-  const channelUrl = profile.url;
-  const avatarUrl = profile.avatarLargeUrl || profile.avatarSmallUrl;
+  const channel = process.env.TELEGRAM_CHANNEL?.trim();
+  const channelUrl = channel
+    ? channel.startsWith("@")
+      ? `https://t.me/${channel.slice(1)}`
+      : /^https?:\/\//i.test(channel)
+        ? channel
+        : `https://t.me/${channel.replace(/^@/, "")}`
+    : null;
+  const avatarUrl = null;
 
   return (
     <main className="page-shell">
-      <section className="hero hero--channel">
-        <div className="channel-header">
-          <div className="channel-header__avatar" aria-hidden="true">
-            {avatarUrl ? <img src={avatarUrl} alt="" /> : initials}
-          </div>
-
-          <div className="channel-header__body">
-            <h1>{siteName}</h1>
-            {channelUrl ? (
-              <p className="channel-header__link">
-                <a href={channelUrl} target="_blank" rel="noreferrer">
-                  Канал в Telegram
-                </a>
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </section>
+      <ChannelHero
+        initialTitle={siteName}
+        initialInitials={initials}
+        initialChannelUrl={channelUrl}
+        initialAvatarUrl={avatarUrl}
+      />
 
       <section id="latest-posts" className="posts-section">
         {initialPage.posts.length === 0 ? (
@@ -59,10 +50,10 @@ export default async function HomePage() {
           <PostsFeed
             initialPosts={initialPage.posts}
             initialHasMore={initialPage.hasMore}
-            siteName={siteName}
+            initialSiteName={siteName}
             initials={initials}
-            channelUrl={channelUrl}
-            avatarUrl={avatarUrl}
+            initialChannelUrl={channelUrl}
+            initialAvatarUrl={avatarUrl}
           />
         )}
       </section>

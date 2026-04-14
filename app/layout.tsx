@@ -3,12 +3,8 @@ import Script from "next/script";
 import "./globals.css";
 
 import { createRootMetadata } from "@/lib/site";
-import { getTelegramChannelProfile } from "@/lib/telegram-channel";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const profile = await getTelegramChannelProfile();
-  return createRootMetadata(profile);
-}
+export const metadata: Metadata = createRootMetadata();
 
 export default function RootLayout({
   children
