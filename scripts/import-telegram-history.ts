@@ -77,6 +77,10 @@ function getOptionalChannel() {
   return process.env.TELEGRAM_CHANNEL?.trim();
 }
 
+function getOptionalChannelSlug() {
+  return process.env.TELEGRAM_CHANNEL_SLUG?.trim();
+}
+
 function getChannelUsername(channel: string) {
   const normalized = channel.trim();
 
@@ -90,6 +94,17 @@ function getChannelUsername(channel: string) {
   }
 
   return normalized;
+}
+
+function normalizeChannelSlug(value: string) {
+  const slug = getChannelUsername(value).trim().toLowerCase();
+
+  // Keep historical typo from breaking media paths during import.
+  if (slug === "carbopunk") {
+    return "carbonpunk";
+  }
+
+  return slug;
 }
 
 function buildSourceUrl(channel: string | undefined, messageId: number) {
@@ -402,7 +417,12 @@ async function collectDraftPosts() {
   const chat = extractChat(payload);
   const exportDir = path.dirname(exportJsonPath);
   const channel = getOptionalChannel();
-  const channelSlug = channel ? getChannelUsername(channel) : `export-${String(chat.id ?? "channel")}`;
+  const configuredChannelSlug = getOptionalChannelSlug();
+  const channelSlug = configuredChannelSlug
+    ? normalizeChannelSlug(configuredChannelSlug)
+    : channel
+      ? normalizeChannelSlug(channel)
+      : `export-${String(chat.id ?? "channel")}`;
   const telegramChatId = String(chat.id ?? channelSlug);
   const messages = chat.messages ?? [];
   const syntheticGroupIds = buildSyntheticGroupIds(messages);

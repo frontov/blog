@@ -96,9 +96,11 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 ```env
 TELEGRAM_EXPORT_PATH=/app/old/result.json
 TELEGRAM_CHANNEL=@your_channel
+TELEGRAM_CHANNEL_SLUG=your_channel
 ```
 
 `TELEGRAM_CHANNEL` нужен только чтобы сайт мог собрать ссылки вида `https://t.me/<channel>/<message_id>`.
+`TELEGRAM_CHANNEL_SLUG` нужен для локального пути медиа. Если хочешь, чтобы файлы складывались в `/opt/blog/public/uploads/telegram/carbonpunk`, укажи `TELEGRAM_CHANNEL_SLUG=carbonpunk`.
 
 Запуск:
 
