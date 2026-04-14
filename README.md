@@ -94,7 +94,7 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 Что нужно заполнить в `.env`:
 
 ```env
-TELEGRAM_EXPORT_PATH=/absolute/path/to/telegram-export/result.json
+TELEGRAM_EXPORT_PATH=/app/old/result.json
 TELEGRAM_CHANNEL=@your_channel
 ```
 
@@ -105,6 +105,9 @@ TELEGRAM_CHANNEL=@your_channel
 ```bash
 npm run import:telegram-history
 ```
+
+На сервере с `docker-compose.server.yml` удобно положить экспорт в `/opt/blog/old/result.json`.
+Эта папка монтируется в контейнер как `/app/old`, поэтому импорт внутри контейнера видит файл по пути `TELEGRAM_EXPORT_PATH=/app/old/result.json`.
 
 Импортёр:
 
@@ -122,6 +125,7 @@ docker-compose -f docker-compose.server.yml up -d
 ```
 
 В этом режиме контейнер подключается к сети `sporza_default`, а пример блока для Caddy лежит в `deploy/Caddyfile.blog`.
+Папки `public/uploads` и `old` монтируются с хоста внутрь контейнера, поэтому архивы и загруженные медиа не попадают в Docker image и не раздувают build context.
 
 ## Простой деплой на сервер
 
