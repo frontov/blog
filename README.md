@@ -4,7 +4,7 @@
 
 - сайт показывает список постов и отдельные страницы публикаций;
 - Telegram webhook принимает новые посты из канала;
-- публикации сохраняются в `data/posts.json` и сразу появляются на сайте.
+- публикации сохраняются в SQLite-базе `data/blog.sqlite` и сразу появляются на сайте.
 
 ## Что внутри
 
@@ -12,7 +12,7 @@
 - `app/api/telegram/webhook/route.ts` — приём постов из Telegram;
 - `lib/posts.ts` — чтение и сохранение постов;
 - `app/api/telegram/file/route.ts` — прокси для фото и видео из Telegram;
-- `data/posts.json` — текущее файловое хранилище.
+- `data/blog.sqlite` — основная база постов.
 
 ## Запуск
 
@@ -50,7 +50,7 @@ docker compose up -d --build
 
 3. Сайт будет доступен на `http://localhost:3000`.
 
-Данные постов сохраняются в Docker volume `blog_data`, поэтому не пропадут после перезапуска контейнера.
+Данные постов сохраняются в Docker volume `blog_data`, поэтому база `data/blog.sqlite` не пропадёт после перезапуска контейнера.
 
 Если хочешь остановить контейнер:
 
@@ -79,20 +79,26 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 - открыть на сервере порт, через который сайт будет доступен снаружи;
 - зарегистрировать webhook уже на публичный адрес сайта.
 
-## Импорт старых постов из Telegram
+## Импорт старых постов из Telegram Desktop export
 
-Текущий webhook забирает только новые публикации. Для загрузки старой истории канала есть отдельный импортёр.
+Текущий webhook забирает только новые публикации. Для загрузки старой истории канала есть отдельный импортёр из экспорта Telegram Desktop.
+
+Как выгрузить архив:
+
+1. Открой Telegram Desktop.
+2. Перейди в нужный канал.
+3. Выбери `Export chat history`.
+4. Включи `Photos`, `Videos` и формат `Machine-readable JSON`.
+5. Дождись завершения экспорта.
 
 Что нужно заполнить в `.env`:
 
 ```env
-TELEGRAM_API_ID=123456
-TELEGRAM_API_HASH=your_telegram_api_hash
+TELEGRAM_EXPORT_PATH=/absolute/path/to/telegram-export/result.json
 TELEGRAM_CHANNEL=@your_channel
-TELEGRAM_SESSION=
 ```
 
-`TELEGRAM_API_ID` и `TELEGRAM_API_HASH` берутся в `https://my.telegram.org`.
+`TELEGRAM_CHANNEL` нужен только чтобы сайт мог собрать ссылки вида `https://t.me/<channel>/<message_id>`.
 
 Запуск:
 
@@ -100,14 +106,11 @@ TELEGRAM_SESSION=
 npm run import:telegram-history
 ```
 
-При первом запуске скрипт попросит номер телефона, код из Telegram и при необходимости пароль 2FA.
-После входа он выведет `TELEGRAM_SESSION` — его лучше сохранить в `.env`, чтобы потом импорт повторно запускался без повторной авторизации.
-
 Импортёр:
 
-- читает всю историю канала;
-- скачивает фото и видео в `public/uploads/telegram`;
-- сохраняет посты в текущее хранилище `data/posts.json`;
+- читает `result.json` из Telegram Desktop export;
+- копирует фото и видео в `public/uploads/telegram`;
+- сохраняет посты в `data/blog.sqlite`;
 - не мешает дальнейшей автопубликации новых постов через webhook.
 
 ## Запуск на сервере с существующим Caddy
@@ -120,38 +123,30 @@ docker-compose -f docker-compose.server.yml up -d
 
 В этом режиме контейнер подключается к сети `sporza_default`, а пример блока для Caddy лежит в `deploy/Caddyfile.blog`.
 
-## GitHub Actions + GHCR
+## Простой деплой на сервер
 
-В репозитории есть workflow `.github/workflows/docker-publish.yml`, который:
-
-- собирает Docker image на каждый push в `main`;
-- публикует его в `ghcr.io/frontov/blog:latest`;
-- собирает image сразу под `linux/amd64`;
-- вшивает production `SITE_URL=https://i.sporly.ru` на этапе build.
-
-Чтобы сервер обновлялся уже без локального `docker load`, можно использовать:
+Для этого проекта используется более простой operational path без registry и без автодеплоя через GitHub Actions:
 
 ```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
-docker pull ghcr.io/frontov/blog:latest
-docker rm -f telegram-blog || true
-docker run -d \
-  --name telegram-blog \
-  --restart unless-stopped \
-  --env-file /opt/blog/.env \
-  -v blog_data:/app/data \
-  --network sporza_default \
-  --network-alias telegram-blog \
-  ghcr.io/frontov/blog:latest
+cd /opt/blog
+git pull --ff-only
+docker-compose -f docker-compose.server.yml up -d --build
+docker exec sporza-caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
-Либо короткий скрипт:
+То же самое делает короткий серверный скрипт:
 
 ```bash
 sh scripts/server-update.sh
 ```
 
-Если образ GHCR приватный, серверу понадобится `docker login ghcr.io`.
+Смысл такой:
+
+1. код обновляется обычным `git pull`
+2. Docker на сервере сам пересобирает контейнер
+3. `Caddy` перезагружается и начинает отдавать новую версию
+
+Это проще поддерживать для личного блога, чем отдельный registry и SSH-деплой из GitHub Actions.
 
 ## Что уже поддерживается
 
@@ -165,6 +160,6 @@ sh scripts/server-update.sh
 ## Что можно улучшить дальше
 
 - загружать изображения Telegram через `getFile` и сохранять локально или в S3;
-- заменить JSON-хранилище на SQLite/Postgres;
+- заменить SQLite на Postgres, если захочется вынести блог за пределы одного сервера;
 - добавить админку, теги, SEO и RSS;
 - форматировать Telegram entities в HTML вместо простого текста.

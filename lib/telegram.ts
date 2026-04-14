@@ -16,6 +16,14 @@ type TelegramPhoto = {
   file_size?: number;
 };
 
+type TelegramThumbnail = {
+  file_id: string;
+  file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+};
+
 type TelegramVideo = {
   file_id: string;
   file_unique_id: string;
@@ -24,11 +32,13 @@ type TelegramVideo = {
   duration: number;
   mime_type?: string;
   file_size?: number;
+  thumbnail?: TelegramThumbnail;
 };
 
 export type TelegramChannelPost = {
   message_id: number;
   date: number;
+  media_group_id?: string;
   text?: string;
   caption?: string;
   entities?: TelegramEntity[];
@@ -110,6 +120,9 @@ export function extractPostMedia(post: TelegramChannelPost): BlogPostMedia[] {
       id: post.video.file_unique_id,
       kind: "video",
       fileId: post.video.file_id,
+      posterUrl: post.video.thumbnail?.file_id
+        ? buildMediaUrl(post.video.thumbnail.file_id)
+        : undefined,
       width: post.video.width,
       height: post.video.height,
       duration: post.video.duration,
@@ -118,4 +131,8 @@ export function extractPostMedia(post: TelegramChannelPost): BlogPostMedia[] {
   }
 
   return media;
+}
+
+function buildMediaUrl(fileId: string) {
+  return `/api/telegram/file?fileId=${encodeURIComponent(fileId)}`;
 }

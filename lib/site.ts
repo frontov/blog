@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import type { TelegramChannelProfile } from "@/lib/telegram-channel";
 import type { BlogPost } from "@/lib/types";
 
 const fallbackSiteUrl = "https://example.com";
@@ -22,9 +23,10 @@ export function toAbsoluteUrl(pathname = "/") {
   return new URL(pathname, getSiteUrl()).toString();
 }
 
-export function createRootMetadata(): Metadata {
-  const siteName = getSiteName();
+export function createRootMetadata(profile?: TelegramChannelProfile): Metadata {
+  const siteName = profile?.title || getSiteName();
   const description = getSiteDescription();
+  const iconUrl = profile?.avatarSmallUrl || profile?.avatarLargeUrl || undefined;
 
   return {
     metadataBase: new URL(getSiteUrl()),
@@ -57,6 +59,12 @@ export function createRootMetadata(): Metadata {
       title: siteName,
       description
     },
+    icons: iconUrl
+      ? {
+          icon: [{ url: iconUrl }],
+          apple: [{ url: iconUrl }]
+        }
+      : undefined,
     robots: {
       index: true,
       follow: true
@@ -65,8 +73,8 @@ export function createRootMetadata(): Metadata {
   };
 }
 
-export function createHomeMetadata(): Metadata {
-  const siteName = getSiteName();
+export function createHomeMetadata(profile?: TelegramChannelProfile): Metadata {
+  const siteName = profile?.title || getSiteName();
   const description = "Публичный блог с заметками, фото и видео из Telegram-канала. Свежие публикации, отдельные страницы постов и читаемый журнальный формат.";
 
   return {

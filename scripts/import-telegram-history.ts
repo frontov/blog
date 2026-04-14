@@ -1,33 +1,64 @@
 import { promises as fs } from "node:fs";
+import { access } from "node:fs/promises";
 import path from "node:path";
-import { createInterface } from "node:readline/promises";
-import { stdin as input, stdout as output } from "node:process";
-
-import { TelegramClient } from "telegram";
-import { StringSession } from "telegram/sessions";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 import { upsertTelegramPost } from "../lib/posts";
-import type { BlogPostMedia } from "../lib/types";
+import type { BlogPostEntity, BlogPostMedia } from "../lib/types";
 
-type MessageLike = {
+const execFileAsync = promisify(execFile);
+
+type ExportTextEntity =
+  | string
+  | {
+      type?: string;
+      text?: string;
+      href?: string;
+    };
+
+type ExportMessage = {
   id?: number;
-  date?: Date | number;
-  message?: string;
-  groupedId?: bigint | string | number;
-  chatId?: bigint | string | number;
-  peerId?: unknown;
-  photo?: { sizes?: Array<{ w?: number; h?: number }> };
-  video?: { duration?: number; w?: number; h?: number; mimeType?: string };
-  media?: unknown;
+  type?: string;
+  media_group_id?: string;
+  grouped_id?: number | string;
+  grouped_id_str?: string;
+  date?: string;
+  date_unixtime?: string;
+  text?: string | ExportTextEntity[];
+  text_entities?: Array<{
+    type?: string;
+    text?: string;
+    href?: string;
+  }>;
+  photo?: string;
+  thumbnail?: string;
+  file?: string;
+  mime_type?: string;
+  media_type?: string;
+  width?: number;
+  height?: number;
+  duration_seconds?: number;
 };
+
+type ExportChat = {
+  id?: number | string;
+  name?: string;
+  type?: string;
+  messages?: ExportMessage[];
+};
+
+type ExportPayload = ExportChat | { chats?: { list?: ExportChat[] } };
 
 type DraftPost = {
   telegramMessageId: number;
   telegramChatId: string;
+  telegramMediaGroupId?: string;
   content: string;
+  entities?: BlogPostEntity[];
+  media: BlogPostMedia[];
   publishedAt: string;
   sourceUrl?: string;
-  media: BlogPostMedia[];
 };
 
 const uploadsRoot = path.join(process.cwd(), "public", "uploads", "telegram");
@@ -40,6 +71,10 @@ function getRequiredEnv(name: string) {
   }
 
   return value;
+}
+
+function getOptionalChannel() {
+  return process.env.TELEGRAM_CHANNEL?.trim();
 }
 
 function getChannelUsername(channel: string) {
@@ -57,22 +92,216 @@ function getChannelUsername(channel: string) {
   return normalized;
 }
 
-function buildSourceUrl(channel: string, messageId: number) {
+function buildSourceUrl(channel: string | undefined, messageId: number) {
+  if (!channel) {
+    return undefined;
+  }
+
   const username = getChannelUsername(channel);
   return username ? `https://t.me/${username}/${messageId}` : undefined;
 }
 
-function mediaExtension(kind: BlogPostMedia["kind"], mimeType?: string) {
-  if (kind === "photo") {
-    return "jpg";
+async function resolveExportJsonPath() {
+  const configuredPath = getRequiredEnv("TELEGRAM_EXPORT_PATH");
+  const absolutePath = path.resolve(process.cwd(), configuredPath);
+
+  const stats = await fs.stat(absolutePath);
+  if (stats.isDirectory()) {
+    return path.join(absolutePath, "result.json");
   }
 
-  if (!mimeType) {
-    return "mp4";
+  return absolutePath;
+}
+
+async function readExportPayload() {
+  const exportJsonPath = await resolveExportJsonPath();
+  const raw = await fs.readFile(exportJsonPath, "utf8");
+
+  return {
+    exportJsonPath,
+    payload: JSON.parse(raw) as ExportPayload
+  };
+}
+
+function extractChat(payload: ExportPayload) {
+  if ("messages" in payload) {
+    return payload;
   }
 
-  const known = mimeType.split("/")[1];
-  return known || "mp4";
+  const list = "chats" in payload ? payload.chats?.list ?? [] : [];
+  const channel = list.find((chat) => chat.type === "personal_channel" || chat.type === "public_supergroup");
+
+  if (!channel) {
+    throw new Error("Could not find channel messages in export JSON");
+  }
+
+  return channel;
+}
+
+function flattenText(text: string | ExportTextEntity[] | undefined) {
+  if (!text) {
+    return "";
+  }
+
+  if (typeof text === "string") {
+    return text;
+  }
+
+  return text
+    .map((part) => (typeof part === "string" ? part : part.text ?? ""))
+    .join("");
+}
+
+function mapEntityType(type?: string) {
+  switch (type) {
+    case "bold":
+      return "bold";
+    case "italic":
+      return "italic";
+    case "underline":
+      return "underline";
+    case "strikethrough":
+      return "strikethrough";
+    case "code":
+      return "code";
+    case "pre":
+      return "pre";
+    case "link":
+      return "text_link";
+    default:
+      return undefined;
+  }
+}
+
+function getMediaGroupId(message: ExportMessage) {
+  if (typeof message.media_group_id === "string") {
+    return message.media_group_id;
+  }
+
+  if (typeof message.grouped_id_str === "string") {
+    return message.grouped_id_str;
+  }
+
+  if (typeof message.grouped_id === "string" || typeof message.grouped_id === "number") {
+    return String(message.grouped_id);
+  }
+
+  return undefined;
+}
+
+function hasMedia(message: ExportMessage) {
+  return Boolean(mediaKind(message));
+}
+
+function getMessageTimestampKey(message: ExportMessage) {
+  if (message.date) {
+    return message.date;
+  }
+
+  if (message.date_unixtime) {
+    return message.date_unixtime;
+  }
+
+  return "";
+}
+
+function getMessageTimestampSeconds(message: ExportMessage) {
+  if (message.date_unixtime) {
+    const parsed = Number(message.date_unixtime);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (message.date) {
+    const parsed = Math.floor(new Date(message.date).getTime() / 1000);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function buildSyntheticGroupIds(messages: ExportMessage[]) {
+  const syntheticGroupIds = new Map<number, string>();
+  let index = 0;
+
+  while (index < messages.length) {
+    const current = messages[index];
+    if (!current?.id || current.type !== "message" || !hasMedia(current) || getMediaGroupId(current)) {
+      index += 1;
+      continue;
+    }
+
+    const timestampSeconds = getMessageTimestampSeconds(current);
+    if (timestampSeconds === null) {
+      index += 1;
+      continue;
+    }
+
+    const cluster: ExportMessage[] = [current];
+    let cursor = index + 1;
+
+    while (cursor < messages.length) {
+      const next = messages[cursor];
+      const nextTimestampSeconds = next ? getMessageTimestampSeconds(next) : null;
+
+      if (
+        !next?.id ||
+        next.type !== "message" ||
+        !hasMedia(next) ||
+        getMediaGroupId(next) ||
+        nextTimestampSeconds === null ||
+        Math.abs(nextTimestampSeconds - timestampSeconds) > 1
+      ) {
+        break;
+      }
+
+      cluster.push(next);
+      cursor += 1;
+    }
+
+    if (cluster.length > 1) {
+      const groupId = `export-${timestampSeconds}-${cluster[0].id}`;
+
+      for (const item of cluster) {
+        if (item.id) {
+          syntheticGroupIds.set(item.id, groupId);
+        }
+      }
+    }
+
+    index = cursor;
+  }
+
+  return syntheticGroupIds;
+}
+
+function extractEntities(message: ExportMessage): BlogPostEntity[] | undefined {
+  const text = flattenText(message.text);
+  const parts = message.text_entities;
+
+  if (!parts?.length || !text) {
+    return undefined;
+  }
+
+  let offset = 0;
+  const entities: BlogPostEntity[] = [];
+
+  for (const part of parts) {
+    const rawText = part.text ?? "";
+    const type = mapEntityType(part.type);
+
+    if (type && rawText) {
+      entities.push({
+        offset,
+        length: rawText.length,
+        type,
+        url: part.href
+      });
+    }
+
+    offset += rawText.length;
+  }
+
+  return entities.length ? entities : undefined;
 }
 
 async function ensureUploadsDir(channelSlug: string) {
@@ -81,186 +310,156 @@ async function ensureUploadsDir(channelSlug: string) {
   return targetDir;
 }
 
-async function prompt(question: string) {
-  const rl = createInterface({ input, output });
-
-  try {
-    return (await rl.question(question)).trim();
-  } finally {
-    rl.close();
+function mediaKind(message: ExportMessage): BlogPostMedia["kind"] | null {
+  if (message.photo) {
+    return "photo";
   }
+
+  if (message.file && (message.mime_type?.startsWith("video/") || message.media_type?.includes("video"))) {
+    return "video";
+  }
+
+  return null;
 }
 
-function widthHeightFromPhoto(message: MessageLike) {
-  const sizes = message.photo?.sizes ?? [];
-  const largest = [...sizes].sort((a, b) => {
-    const aArea = (a.w ?? 0) * (a.h ?? 0);
-    const bArea = (b.w ?? 0) * (b.h ?? 0);
-    return bArea - aArea;
-  })[0];
-
-  return {
-    width: largest?.w,
-    height: largest?.h
-  };
-}
-
-async function downloadMediaForMessage(
-  client: TelegramClient,
-  message: MessageLike,
+async function copyMedia(
+  exportDir: string,
   channelSlug: string,
-  sequence: number
+  message: ExportMessage
 ) {
-  const isPhoto = Boolean(message.photo);
-  const isVideo = Boolean(message.video);
-
-  if (!isPhoto && !isVideo) {
+  const kind = mediaKind(message);
+  if (!kind || !message.id) {
     return null;
   }
 
-  const kind: BlogPostMedia["kind"] = isVideo ? "video" : "photo";
-  const video = message.video;
-  const extension = mediaExtension(kind, video?.mimeType);
+  const relativeSource = kind === "photo" ? message.photo : message.file;
+  if (!relativeSource) {
+    return null;
+  }
+
+  const sourcePath = path.resolve(exportDir, relativeSource);
+
+  try {
+    await fs.access(sourcePath);
+  } catch {
+    return null;
+  }
+
   const targetDir = await ensureUploadsDir(channelSlug);
-  const baseName = `${message.id}-${sequence}.${extension}`;
-  const absoluteFilePath = path.join(targetDir, baseName);
+  const extension = path.extname(sourcePath) || (kind === "photo" ? ".jpg" : ".mp4");
+  const targetBaseName = `${message.id}${extension}`;
+  const targetPath = path.join(targetDir, targetBaseName);
 
-  await client.downloadMedia(message as never, {
-    outputFile: absoluteFilePath
-  });
-
-  const photoDimensions = widthHeightFromPhoto(message);
+  await fs.copyFile(sourcePath, targetPath);
+  const posterUrl = kind === "video"
+    ? await ensureVideoPoster(targetPath, channelSlug, String(message.id))
+    : undefined;
 
   return {
-    id: `${message.id}-${sequence}`,
+    id: String(message.id),
     kind,
-    url: `/uploads/telegram/${channelSlug}/${baseName}`,
-    width: isVideo ? video?.w : photoDimensions.width,
-    height: isVideo ? video?.h : photoDimensions.height,
-    duration: video?.duration,
-    mimeType: video?.mimeType
+    url: `/uploads/telegram/${channelSlug}/${targetBaseName}`,
+    posterUrl,
+    width: message.width,
+    height: message.height,
+    duration: message.duration_seconds,
+    mimeType: message.mime_type
   } satisfies BlogPostMedia;
 }
 
-async function createClient() {
-  const apiId = Number(getRequiredEnv("TELEGRAM_API_ID"));
-  const apiHash = getRequiredEnv("TELEGRAM_API_HASH");
-  const session = process.env.TELEGRAM_SESSION || "";
+async function ensureVideoPoster(targetPath: string, channelSlug: string, messageId: string) {
+  const posterPath = targetPath.replace(/\.[^.]+$/, ".jpg");
 
-  const client = new TelegramClient(new StringSession(session), apiId, apiHash, {
-    connectionRetries: 5
-  });
-
-  await client.start({
-    phoneNumber: async () => prompt("Telegram phone number: "),
-    password: async () => prompt("Telegram 2FA password (if enabled): "),
-    phoneCode: async () => prompt("Telegram login code: "),
-    onError: (error) => {
-      throw error;
-    }
-  });
-
-  const nextSession = client.session.save();
-  if (!process.env.TELEGRAM_SESSION) {
-    output.write(`\nSave this TELEGRAM_SESSION to your .env for future imports:\n${nextSession}\n\n`);
+  try {
+    await access(posterPath);
+    return `/uploads/telegram/${channelSlug}/${messageId}.jpg`;
+  } catch {
+    // fall through and try to generate a poster
   }
 
-  return client;
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-ss",
+      "00:00:00.100",
+      "-i",
+      targetPath,
+      "-frames:v",
+      "1",
+      "-q:v",
+      "2",
+      posterPath
+    ]);
+
+    return `/uploads/telegram/${channelSlug}/${messageId}.jpg`;
+  } catch {
+    return undefined;
+  }
 }
 
-async function collectDraftPosts(client: TelegramClient, channel: string) {
-  const entity = await client.getEntity(channel);
-  const channelSlug = getChannelUsername(channel);
-  const groupedPosts = new Map<string, DraftPost>();
-  const singlePosts: DraftPost[] = [];
+async function collectDraftPosts() {
+  const { exportJsonPath, payload } = await readExportPayload();
+  const chat = extractChat(payload);
+  const exportDir = path.dirname(exportJsonPath);
+  const channel = getOptionalChannel();
+  const channelSlug = channel ? getChannelUsername(channel) : `export-${String(chat.id ?? "channel")}`;
+  const telegramChatId = String(chat.id ?? channelSlug);
+  const messages = chat.messages ?? [];
+  const syntheticGroupIds = buildSyntheticGroupIds(messages);
 
-  for await (const rawMessage of client.iterMessages(entity, { reverse: true })) {
-    const message = rawMessage as unknown as MessageLike;
+  const drafts: DraftPost[] = [];
 
-    if (!message.id || !message.date) {
+  for (const message of messages) {
+    if (message.type !== "message" || !message.id) {
       continue;
     }
 
-    const publishedAt = message.date instanceof Date
-      ? message.date.toISOString()
-      : new Date(message.date * 1000).toISOString();
-
-    const content = message.message?.trim() ?? "";
-    const media = await downloadMediaForMessage(client, message, channelSlug, 1);
+    const content = flattenText(message.text).trim();
+    const media = await copyMedia(exportDir, channelSlug, message);
 
     if (!content && !media) {
       continue;
     }
 
-    const draft: DraftPost = {
+    const publishedAt = message.date
+      ? new Date(message.date).toISOString()
+      : new Date(Number(message.date_unixtime ?? "0") * 1000).toISOString();
+
+    drafts.push({
       telegramMessageId: message.id,
-      telegramChatId: String(message.chatId ?? channelSlug),
+      telegramChatId,
+      telegramMediaGroupId: getMediaGroupId(message) ?? syntheticGroupIds.get(message.id),
       content,
+      entities: extractEntities(message),
+      media: media ? [media] : [],
       publishedAt,
-      sourceUrl: buildSourceUrl(channel, message.id),
-      media: media ? [media] : []
-    };
-
-    if (message.groupedId) {
-      const key = String(message.groupedId);
-      const existing = groupedPosts.get(key);
-
-      if (existing) {
-        existing.telegramMessageId = Math.min(existing.telegramMessageId, draft.telegramMessageId);
-        existing.sourceUrl = buildSourceUrl(channel, existing.telegramMessageId);
-        existing.publishedAt = existing.publishedAt < draft.publishedAt ? existing.publishedAt : draft.publishedAt;
-
-        if (!existing.content && draft.content) {
-          existing.content = draft.content;
-        }
-
-        if (draft.media.length) {
-          const nextSequence = existing.media.length + 1;
-          const downloaded = await downloadMediaForMessage(client, message, channelSlug, nextSequence);
-          if (downloaded) {
-            existing.media.push(downloaded);
-          }
-        }
-      } else {
-        groupedPosts.set(key, draft);
-      }
-
-      continue;
-    }
-
-    singlePosts.push(draft);
+      sourceUrl: buildSourceUrl(channel, message.id)
+    });
   }
 
-  return [...singlePosts, ...groupedPosts.values()].sort((a, b) => {
-    return new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime();
-  });
+  return drafts;
 }
 
 async function main() {
-  const channel = getRequiredEnv("TELEGRAM_CHANNEL");
-  const client = await createClient();
+  const drafts = await collectDraftPosts();
 
-  try {
-    const drafts = await collectDraftPosts(client, channel);
+  let imported = 0;
+  for (const draft of drafts) {
+    await upsertTelegramPost({
+      telegramMessageId: draft.telegramMessageId,
+      telegramChatId: draft.telegramChatId,
+      telegramMediaGroupId: draft.telegramMediaGroupId,
+      content: draft.content,
+      entities: draft.entities,
+      media: draft.media,
+      publishedAt: draft.publishedAt,
+      sourceUrl: draft.sourceUrl
+    });
 
-    let imported = 0;
-    for (const draft of drafts) {
-      await upsertTelegramPost({
-        telegramMessageId: draft.telegramMessageId,
-        telegramChatId: draft.telegramChatId,
-        content: draft.content,
-        media: draft.media,
-        publishedAt: draft.publishedAt,
-        sourceUrl: draft.sourceUrl
-      });
-
-      imported += 1;
-    }
-
-    output.write(`Imported ${imported} posts from ${channel}\n`);
-  } finally {
-    await client.disconnect();
+    imported += 1;
   }
+
+  console.log(`Imported ${imported} posts from Telegram Desktop export`);
 }
 
 main().catch((error) => {

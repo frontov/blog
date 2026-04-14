@@ -11,6 +11,7 @@ export type BlogPostMedia = {
   kind: "photo" | "video";
   fileId?: string;
   url?: string;
+  posterUrl?: string;
   width?: number;
   height?: number;
   duration?: number;
@@ -21,6 +22,7 @@ export type BlogPost = {
   id: string;
   telegramMessageId: number;
   telegramChatId: string;
+  telegramMediaGroupId?: string;
   slug: string;
   title: string;
   excerpt: string;

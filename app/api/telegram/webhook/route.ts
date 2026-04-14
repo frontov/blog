@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
   const savedPost = await upsertTelegramPost({
     telegramMessageId: post.message_id,
     telegramChatId: String(post.chat.id),
+    telegramMediaGroupId: post.media_group_id,
     content,
     entities: extractPostEntities(post),
     media,
