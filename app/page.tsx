@@ -6,6 +6,7 @@ import { readPostsPage } from "@/lib/posts";
 import { createHomeMetadata, getSiteName } from "@/lib/site";
 
 export const metadata: Metadata = createHomeMetadata();
+export const dynamic = "force-dynamic";
 
 const INITIAL_PAGE_SIZE = 12;
 
