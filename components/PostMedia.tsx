@@ -257,15 +257,22 @@ export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
                     loading="lazy"
                   />
                 ) : (
-                  <video
-                    src={viewerItems[index].src}
-                    poster={viewerItems[index].poster}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    width={item.width}
-                    height={item.height}
-                  />
+                  <span className="post-media__video-thumb">
+                    {viewerItems[index].poster ? (
+                      <img
+                        src={viewerItems[index].poster}
+                        alt=""
+                        width={item.width}
+                        height={item.height}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="post-media__video-fallback" aria-hidden="true" />
+                    )}
+                    <span className="post-media__play-badge" aria-hidden="true">
+                      ▶
+                    </span>
+                  </span>
                 )}
               </button>
             </figure>
