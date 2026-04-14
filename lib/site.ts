@@ -10,6 +10,20 @@ export function getSiteUrl() {
   return process.env.SITE_URL || fallbackSiteUrl;
 }
 
+function getSiteVerification() {
+  const google = process.env.GOOGLE_SITE_VERIFICATION?.trim();
+  const yandex = process.env.YANDEX_VERIFICATION?.trim();
+
+  if (!google && !yandex) {
+    return undefined;
+  }
+
+  return {
+    google,
+    yandex
+  };
+}
+
 export function getSiteName() {
   return process.env.SITE_NAME || fallbackSiteName;
 }
@@ -61,6 +75,7 @@ export function createRootMetadata(): Metadata {
       index: true,
       follow: true
     },
+    verification: getSiteVerification(),
     category: "blog"
   };
 }

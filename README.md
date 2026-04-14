@@ -173,6 +173,29 @@ sh scripts/server-update.sh
 - публичная главная страница с hero-блоком и featured-постом;
 - `sitemap.xml` и `robots.txt` для индексации.
 
+## Подключение Google и Яндекс индексации
+
+1. Открой Google Search Console и добавь ресурс `https://your-domain.com`.
+2. Выбери подтверждение через HTML meta tag и скопируй токен.
+3. Открой Яндекс Вебмастер, добавь сайт и тоже выбери подтверждение через meta tag.
+4. Заполни в `.env`:
+
+```env
+GOOGLE_SITE_VERIFICATION=your_google_token
+YANDEX_VERIFICATION=your_yandex_token
+```
+
+5. Пересобери сайт:
+
+```bash
+docker compose -f docker-compose.server.yml up -d --build
+```
+
+6. После деплоя нажми Verify в Google Search Console и Яндекс Вебмастере.
+7. Отправь sitemap `https://your-domain.com/sitemap.xml` в оба кабинета.
+
+`robots.txt` и `sitemap.xml` уже генерируются автоматически, поэтому отдельные файлы для индексации добавлять не нужно.
+
 ## Что можно улучшить дальше
 
 - загружать изображения Telegram через `getFile` и сохранять локально или в S3;
