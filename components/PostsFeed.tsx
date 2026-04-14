@@ -17,6 +17,40 @@ function formatDate(date: string) {
   }).format(new Date(date));
 }
 
+function normalizePreviewText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[.,!?;:()"«»…]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function shouldRenderExcerpt(title: string, excerpt: string) {
+  const normalizedTitle = normalizePreviewText(title);
+  const normalizedExcerpt = normalizePreviewText(excerpt);
+
+  if (!normalizedExcerpt) {
+    return false;
+  }
+
+  if (!normalizedTitle) {
+    return true;
+  }
+
+  if (normalizedExcerpt === normalizedTitle || normalizedTitle === normalizedExcerpt) {
+    return false;
+  }
+
+  if (
+    normalizedExcerpt.startsWith(normalizedTitle) &&
+    normalizedExcerpt.length <= normalizedTitle.length + 80
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 type PostsFeedProps = {
   initialPosts: BlogPost[];
   initialHasMore: boolean;
@@ -207,7 +241,9 @@ export function PostsFeed({
             <PostMedia media={post.media} />
 
             <h3>{post.title}</h3>
-            <RichPostContent content={post.excerpt} />
+            {shouldRenderExcerpt(post.title, post.excerpt) ? (
+              <RichPostContent content={post.excerpt} />
+            ) : null}
 
             <div className="post-card__footer">
               <Link href={`/posts/${post.slug}`}>Открыть пост</Link>
