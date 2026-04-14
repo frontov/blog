@@ -116,15 +116,20 @@ npm run import:telegram-history
 - сохраняет посты в `data/blog.sqlite`;
 - не мешает дальнейшей автопубликации новых постов через webhook.
 
-## Запуск на сервере с существующим Caddy
+## Запуск на сервере с встроенным Caddy
 
-Если на сервере уже есть reverse proxy `Caddy`, можно запускать блог без проброса порта наружу:
+Серверный compose поднимает и сам блог, и `Caddy`, который отдаёт сайт на `80/443`:
 
 ```bash
-docker-compose -f docker-compose.server.yml up -d
+docker-compose -f docker-compose.server.yml up -d --build
 ```
 
-В этом режиме контейнер подключается к сети `sporza_default`, а пример блока для Caddy лежит в `deploy/Caddyfile.blog`.
+В этом режиме:
+
+- `blog` слушает только внутри compose-сети;
+- `caddy` публикует `80/443` наружу;
+- сертификат для `i.sporly.ru` получает сам `Caddy`;
+- конфиг лежит в `deploy/Caddyfile.blog`.
 Папки `public/uploads` и `old` монтируются с хоста внутрь контейнера, поэтому архивы и загруженные медиа не попадают в Docker image и не раздувают build context.
 
 ## Простой деплой на сервер
@@ -135,7 +140,6 @@ docker-compose -f docker-compose.server.yml up -d
 cd /opt/blog
 git pull --ff-only
 docker-compose -f docker-compose.server.yml up -d --build
-docker exec sporza-caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
 То же самое делает короткий серверный скрипт:
@@ -148,7 +152,7 @@ sh scripts/server-update.sh
 
 1. код обновляется обычным `git pull`
 2. Docker на сервере сам пересобирает контейнер
-3. `Caddy` перезагружается и начинает отдавать новую версию
+3. `Caddy` в том же compose-стеке продолжает проксировать новую версию
 
 Это проще поддерживать для личного блога, чем отдельный registry и SSH-деплой из GitHub Actions.
 

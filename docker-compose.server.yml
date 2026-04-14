@@ -11,16 +11,24 @@ services:
       - blog_data:/app/data
       - ./public/uploads:/app/public/uploads
       - ./old:/app/old
-    networks:
-      default:
-      sporza_proxy:
-        aliases:
-          - telegram-blog
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: blog-caddy
+    restart: unless-stopped
+    depends_on:
+      - blog
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile.blog:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   blog_data:
-
-networks:
-  sporza_proxy:
-    external: true
-    name: sporza_default
+  caddy_data:
+  caddy_config:
