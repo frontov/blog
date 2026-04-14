@@ -97,6 +97,28 @@ function parseJsonArray<T>(value: string | null, schema: z.ZodType<T[]>) {
   return result.length ? result : undefined;
 }
 
+function normalizeLegacyUploadUrl(value: string | undefined) {
+  if (!value) {
+    return value;
+  }
+
+  return value.replace("/uploads/telegram/carbopunk/", "/uploads/telegram/carbonpunk/");
+}
+
+function parseMediaArray(value: string | null) {
+  const media = parseJsonArray(value, mediaSchema);
+
+  if (!media) {
+    return undefined;
+  }
+
+  return media.map((item) => ({
+    ...item,
+    url: normalizeLegacyUploadUrl(item.url),
+    posterUrl: normalizeLegacyUploadUrl(item.posterUrl)
+  }));
+}
+
 function optionalString(value: unknown) {
   return typeof value === "string" ? value : undefined;
 }
@@ -115,11 +137,8 @@ function normalizePost(row: Record<string, unknown>) {
       typeof row.entities_json === "string" ? row.entities_json : null,
       entitiesSchema
     ),
-    media: parseJsonArray(
-      typeof row.media_json === "string" ? row.media_json : null,
-      mediaSchema
-    ),
-    coverImage: optionalString(row.cover_image),
+    media: parseMediaArray(typeof row.media_json === "string" ? row.media_json : null),
+    coverImage: normalizeLegacyUploadUrl(optionalString(row.cover_image)),
     publishedAt: row.published_at,
     sourceUrl: optionalString(row.source_url)
   });
