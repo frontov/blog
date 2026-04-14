@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
 
-import { buildTelegramFileUrl, getTelegramFilePath } from "@/lib/telegram-files";
+import { ensureCachedTelegramFile } from "@/lib/telegram-files";
 
 export async function GET(request: NextRequest) {
   const fileId = request.nextUrl.searchParams.get("fileId");
@@ -10,21 +11,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const filePath = await getTelegramFilePath(fileId);
-    const telegramFileUrl = buildTelegramFileUrl(filePath);
-    const upstream = await fetch(telegramFileUrl, {
-      next: { revalidate: 60 * 60 }
-    });
+    const cachedFile = await ensureCachedTelegramFile(fileId);
+    const buffer = await readFile(cachedFile.absolutePath);
 
-    if (!upstream.ok || !upstream.body) {
-      return NextResponse.json({ ok: false, error: "Failed to fetch Telegram file" }, { status: 502 });
-    }
-
-    return new NextResponse(upstream.body, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
-        "Content-Type": upstream.headers.get("content-type") || "application/octet-stream",
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400"
+        "Content-Type": cachedFile.contentType,
+        "Cache-Control": "public, max-age=31536000, immutable"
       }
     });
   } catch (error) {

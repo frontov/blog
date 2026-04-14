@@ -5,3 +5,5 @@ node_modules
 public/uploads
 data/*.sqlite
 data/*.sqlite-*
+data/thumb-cache
+data/telegram-file-cache

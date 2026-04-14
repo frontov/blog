@@ -118,12 +118,18 @@ npm run import:telegram-history
 - сохраняет посты в `data/blog.sqlite`;
 - не мешает дальнейшей автопубликации новых постов через webhook.
 
+Дополнительно сайт теперь:
+
+- кэширует файлы, полученные через Telegram Bot API, в `data/telegram-file-cache`;
+- генерирует уменьшенные thumbnails для ленты в `data/thumb-cache`;
+- отдаёт локальные медиа с долгим `Cache-Control`, чтобы повторные открытия были быстрее.
+
 ## Запуск на сервере с встроенным Caddy
 
 Серверный compose поднимает и сам блог, и `Caddy`, который отдаёт сайт на `80/443`:
 
 ```bash
-docker-compose -f docker-compose.server.yml up -d --build
+docker compose -f docker-compose.server.yml up -d --build
 ```
 
 В этом режиме:
@@ -141,7 +147,7 @@ docker-compose -f docker-compose.server.yml up -d --build
 ```bash
 cd /opt/blog
 git pull --ff-only
-docker-compose -f docker-compose.server.yml up -d --build
+docker compose -f docker-compose.server.yml up -d --build
 ```
 
 То же самое делает короткий серверный скрипт:

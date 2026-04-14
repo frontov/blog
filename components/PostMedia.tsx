@@ -20,6 +20,10 @@ function resolveMediaUrl(item: BlogPostMedia) {
   return "";
 }
 
+function buildThumbUrl(src: string) {
+  return `/api/media/thumb?src=${encodeURIComponent(src)}`;
+}
+
 function resolvePosterUrl(item: BlogPostMedia) {
   if (item.posterUrl) {
     return item.posterUrl;
@@ -30,6 +34,16 @@ function resolvePosterUrl(item: BlogPostMedia) {
   }
 
   return item.url.replace(/\.[^./?#]+$/, ".jpg");
+}
+
+function resolvePreviewUrl(item: BlogPostMedia) {
+  if (item.kind === "photo") {
+    const source = resolveMediaUrl(item);
+    return source ? buildThumbUrl(source) : source;
+  }
+
+  const poster = resolvePosterUrl(item);
+  return poster ? buildThumbUrl(poster) : undefined;
 }
 
 function isPortrait(item: BlogPostMedia) {
@@ -231,6 +245,7 @@ export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
     src: resolveMediaUrl(item),
     poster: resolvePosterUrl(item)
   }));
+  const previewItems = media.map((item) => resolvePreviewUrl(item));
 
   return (
     <>
@@ -250,7 +265,7 @@ export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
               >
                 {item.kind === "photo" ? (
                   <img
-                    src={viewerItems[index].src}
+                    src={previewItems[index] || viewerItems[index].src}
                     alt=""
                     width={item.width}
                     height={item.height}
@@ -260,7 +275,7 @@ export function PostMedia({ media }: { media?: BlogPostMedia[] }) {
                   <span className="post-media__video-thumb">
                     {viewerItems[index].poster ? (
                       <img
-                        src={viewerItems[index].poster}
+                        src={previewItems[index] || viewerItems[index].poster}
                         alt=""
                         width={item.width}
                         height={item.height}
